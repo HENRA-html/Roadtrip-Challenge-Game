@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>R]oadtrip Challenges</title>
+<style>
+  /* Mobile-first, kept the black + big red button vibe you specified */
+  :root{
+    --bg:#000;
+    --text:#fff;
+    --accent:#e11;
+    --muted:#999;
+    --card:#111;
+    --queue-bg:#1a1a1a;
+    --btn-radius:12px;
+  }
+  html,body{height:100%; margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:var(--bg); color:var(--text);}
+  .wrap{min-height:100%; display:flex; flex-direction:column; align-items:center; padding:18px;}
+  #turn-indicator{font-size:28px; font-weight:700; margin-top:8px; text-align:center;}
+  /* Center big red button */
+  #get-challenge-btn{
+    background:var(--accent);
+    color:white;
+    border:none;
+    padding:22px 34px;
+    font-size:28px;
+    border-radius:var(--btn-radius);
+    margin:28px 0;
+    box-shadow: 0 8px 18px rgba(225,17,17,0.25);
+    min-width:220px;
+  }
+  #get-challenge-btn:active{transform:translateY(2px);}
+  /* challenge area */
+  #challenge-display{
+    width:100%;
+    max-width:720px;
+    min-height:64px;
+    background:var(--card);
+    border-radius:10px;
+    padding:12px 14px;
+    box-sizing:border-box;
+    font-size:18px;
+    line-height:1.3;
+    text-align:center;
+  }
+  /* action buttons area directly under challenge */
+  #action-buttons{ margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .action-btn{
+    padding:8px 12px;
+    border-radius:8px;
+    border:none;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .accept-btn{ background:#27ae60; color:#fff; }
+  .queue-btn{ background:#f39c12; color:#111; }
+  /* points at bottom center */
+  #points{
+    margin-top:28px;
+    font-size:16px;
+    text-align:center;
+    width:100%;
+    max-width:720px;
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+    box-sizing:border-box;
+    padding:10px;
+  }
+  #points .score{flex:1; text-align:center;}
+  #queue-links{margin-top:6px; text-align:center; font-size:15px;}
+  .queue-link{ color:#ff6666; text-decoration:underline; cursor:pointer; margin:0 8px; }
+  /* queue panel */
+  #queue-display{
+    width:100%;
+    max-width:720px;
+    margin-top:14px;
+    background:var(--queue-bg);
+    border-radius:10px;
+    padding:10px;
+    display:none;
+    box-sizing:border-box;
+    color:var(--text);
+  }
+  .queue-item{ padding:8px 6px; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .queue-item:last-child{border-bottom:none;}
+  .queue-item .right{display:flex; gap:8px; align-items:center;}
+  .small-btn{ padding:6px 8px; border-radius:8px; font-size:13px; border:none; cursor:pointer; }
+  .do-now{ background:#2ecc71; color:#000; }
+  .remove{ background:#e74c3c; color:#fff; }
+  /* helpful tiny text */
+  .hint{ color:var(--muted); font-size:13px; margin-top:6px; text-align:center;}
+  @media(min-width:720px){
+    #turn-indicator{font-size:34px;}
+    #get-challenge-btn{font-size:36px; padding:28px 46px;}
+    #challenge-display{font-size:20px;}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div id="turn-indicator">P1's Turn</div>
+
+    <button id="get-challenge-btn">GET CHALLENGE</button>
+
+    <div id="challenge-display">Tap the red button to get a challenge for the current player.</div>
+
+    <!-- action-buttons is a dedicated area for Accept / Add to Queue so nothing else is removed -->
+    <div id="action-buttons" aria-hidden="true"></div>
+
+    <div id="points">
+      <div class="score" id="p1-points">P1 Points: 0</div>
+      <div class="score" id="p2-points">P2 Points: 0</div>
+    </div>
+
+    <div id="queue-links">
+      <span id="p1-queue-btn" class="queue-link">P1 Queue</span> |
+      <span id="p2-queue-btn" class="queue-link">P2 Queue</span>
+    </div>
+
+    <div id="queue-display" aria-live="polite"></div>
+
+    <div class="hint">You can "Add to Queue" if a challenge isn't doable right now. Queued items can be done later by pressing "Do Now".</div>
+  </div>
+
+<script>
+/* ============
+   Data / Configuration
+   ============ */
+
+// Full challenge list — I used the car-friendly ones you provided.
+// If you want me to prune or tag with 'timed' I can add that next.
+const challenges = [
+  // Car Interaction / Safe-when-stopped
+  "Take the binoculars or the telescope and stare into the next car with them (only when stopped)",
+  "At the next red light, ask the person in the car next to you 'Do you want to hear about our Lord and Savior Jesus Christ?' (only when stopped)",
+  "At the next red light, roll down your window and signal to the car next to you to roll down their window. If they do, halfway through them rolling down their window, start rolling your window up. (only when stopped)",
+  "At the next red light, look at the person in the car next to you and start counting down from 5 with your fingers (only when stopped)",
+  "Pretend to take paparazzi photos of the next most beat up car you see.",
+  "At the next red light, roll down your window and give a random person a big thumbs up. (only when stopped)",
+  // Acting / Voice / Timed
+  "Talk like Louis Armstrong for 2 minutes. (timed)",
+  "Talk with a NYC/NY Italian accent for 5 minutes. (timed)",
+  "Narrate random things like David Attenborough for 1 hour. (timed)",
+  "Say 'Ruh Oh Raggy' in your best Scooby-Doo voice every time you see a green car for 1 hour. (timed)",
+  "Talk like Donald Trump for a set period of time. (timed)",
+  "Talk like the stereotypical high school popular girl for 2 minutes. (timed)",
+  "Act like a news reporter for 30 seconds. (timed)",
+  "Pretend to be a dramatic sports commentator narrating the road. (timed)",
+  "Announce everything on the road like you're in the military. (timed)",
+  // Random / physical / trigger
+  "Make faces at the car next to you.",
+  "Dramatically act like you're driving the car for 2 minutes. (timed)",
+  "Stare into the soul of the next person in a blue car.",
+  "Pretend to snipe every animal you see for 1 hour. (timed)",
+  "Take something next to you and pretend to reload it in a way that makes sense.",
+  "Choose a random car and make up its entire life story.",
+  "If a car is being reckless, point at it in a dramatic way and say in a semi-deep voice 'beep-beep'.",
+  "Act like every person in a car is famous for 1 minute. (timed)",
+  "Yell 'PIT STOP!!!' every time you see a gas station.",
+  "Mime throwing a grenade at the next black car you see.",
+  "Overreact to every roadbump/pothole for the next 30 minutes. (timed)",
+  "Ask random toddler questions for 2 minutes. (timed)",
+  "Pretend the road is a warzone for 1 minute. (timed)",
+  "Take the binoculars and stare into the next car (only when stopped)",
+  "Give a huge side-eye to the car next to you",
+  "Make an over-the-top slow clap for the next pedestrian you see"
+];
+
+/* ============
+   State
+   ============ */
+let currentPlayer = "P1"; // "P1" or "P2"
+const points = { P1: 0, P2: 0 };
+const queues = { P1: [], P2: [] };
+let lastChallenge = null;
+
+/* ============
+   DOM refs
+   ============ */
+const turnIndicator = document.getElementById("turn-indicator");
+const getBtn = document.getElementById("get-challenge-btn");
+const challengeDisplay = document.getElementById("challenge-display");
+const actionButtons = document.getElementById("action-buttons");
+const p1Points = document.getElementById("p1-points");
+const p2Points = document.getElementById("p2-points");
+const p1QueueBtn = document.getElementById("p1-queue-btn");
+const p2QueueBtn = document.getElementById("p2-queue-btn");
+const queueDisplay = document.getElementById("queue-display");
+
+/* ============
+   Helpers
+   ============ */
+
+function updateTurnIndicator(){
+  turnIndicator.textContent = `${currentPlayer}'s Turn`;
+}
+
+function updatePoints(){
+  p1Points.textContent = `P1 Points: ${points.P1}`;
+  p2Points.textContent = `P2 Points: ${points.P2}`;
+}
+
+/* pick random challenge */
+function getRandomChallenge(){
+  const idx = Math.floor(Math.random() * challenges.length);
+  return challenges[idx];
+}
+
+/* render the current challenge and action buttons */
+function showChallengeText(chText){
+  lastChallenge = chText;
+  challengeDisplay.textContent = `${currentPlayer}, your challenge:\n\n${chText}`;
+
+  // remove any existing action buttons (we target container rather than removing siblings)
+  actionButtons.innerHTML = "";
+
+  // Accept button
+  const accept = document.createElement("button");
+  accept.className = "action-btn accept-btn";
+  accept.textContent = "Accept";
+  accept.onclick = () => acceptChallenge();
+
+  // Add to Queue button
+  const queue = document.createElement("button");
+  queue.className = "action-btn queue-btn";
+  queue.textContent = "Add to Queue";
+  queue.onclick = () => addToQueue();
+
+  actionButtons.appendChild(accept);
+  actionButtons.appendChild(queue);
+}
+
+/* Clear challenge area and action buttons (keeps other UI alive) */
+function clearChallengeArea(){
+  challengeDisplay.textContent = "";
+  actionButtons.innerHTML = "";
+  lastChallenge = null;
+}
+
+/* Switch turns */
+function switchTurn(){
+  currentPlayer = (currentPlayer === "P1") ? "P2" : "P1";
+  updateTurnIndicator();
+}
+
+/* Accept (complete) the current challenge */
+function acceptChallenge(){
+  if(!lastChallenge) return;
+  // Award 1 point for completion — you can change scoring later
+  points[currentPlayer] += 1;
+  updatePoints();
+
+  // Clear current challenge and switch turn
+  clearChallengeArea();
+  switchTurn();
+}
+
+/* Add the current challenge to the current player's queue */
+function addToQueue(){
+  if(!lastChallenge) return;
+  queues[currentPlayer].push(lastChallenge);
+  // feedback
+  showUserToast(`${currentPlayer}: "${lastChallenge}" added to your queue.`);
+  clearChallengeArea();
+  switchTurn();
+  // if queue UI is open for this player, refresh it
+  const displayedFor = queueDisplay.getAttribute("data-player");
+  if(displayedFor === currentPlayer) renderQueue(currentPlayer);
+}
+
+/* Small ephemeral message so user sees feedback (no external libs) */
+function showUserToast(text){
+  // simple, non-blocking visual feedback
+  const el = document.createElement("div");
+  el.textContent = text;
+  el.style.position = "fixed";
+  el.style.left = "50%";
+  el.style.transform = "translateX(-50%)";
+  el.style.bottom = "16px";
+  el.style.background = "#222";
+  el.style.color = "#fff";
+  el.style.padding = "8px 12px";
+  el.style.borderRadius = "8px";
+  el.style.boxShadow = "0 6px 14px rgba(0,0,0,0.5)";
+  document.body.appendChild(el);
+  setTimeout(()=> el.remove(), 1800);
+}
+
+/* Render queue UI for a player (toggle on/off) */
+function renderQueue(player){
+  const currently = queueDisplay.style.display === "block";
+  const showingFor = queueDisplay.getAttribute("data-player");
+  // If already showing the same player's queue, hide it
+  if(currently && showingFor === player){
+    queueDisplay.style.display = "none";
+    queueDisplay.setAttribute("data-player","");
+    return;
+  }
+
+  // show for this player
+  queueDisplay.style.display = "block";
+  queueDisplay.setAttribute("data-player", player);
+  queueDisplay.innerHTML = `<h3 style="margin:0 0 10px 0; font-size:16px;">${player} Queue</h3>`;
+
+  const list = queues[player];
+  if(list.length === 0){
+    queueDisplay.innerHTML += `<div style="color:#aaa; padding:8px 0;">No challenges queued</div>`;
+    return;
+  }
+
+  list.forEach((q, idx) => {
+    const item = document.createElement("div");
+    item.className = "queue-item";
+    const left = document.createElement("div");
+    left.style.flex = "1";
+    left.style.whiteSpace = "normal";
+    left.textContent = `${idx+1}. ${q}`;
+
+    const right = document.createElement("div");
+    right.className = "right";
+
+    const doNow = document.createElement("button");
+    doNow.className = "small-btn do-now";
+    doNow.textContent = "Do Now";
+    doNow.onclick = () => {
+      // when player chooses to do a queued challenge now:
+      // 1) remove it from queue
+      // 2) award point to the player (since they accepted it)
+      // 3) hide queue and switch turn (or keep it as you prefer)
+      queues[player].splice(idx,1);
+      points[player] += 1;
+      updatePoints();
+      showUserToast(`${player} completed queued challenge and gained 1 point.`);
+      queueDisplay.style.display = "none";
+      queueDisplay.setAttribute("data-player","");
+      // set turn to other player after finishing queued challenge
+      currentPlayer = (player === "P1") ? "P2" : "P1";
+      updateTurnIndicator();
+    };
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "small-btn remove";
+    removeBtn.textContent = "Remove";
+    removeBtn.onclick = () => {
+      queues[player].splice(idx,1);
+      renderQueue(player); // refresh
+    };
+
+    right.appendChild(doNow);
+    right.appendChild(removeBtn);
+
+    item.appendChild(left);
+    item.appendChild(right);
+    queueDisplay.appendChild(item);
+  });
+}
+
+/* ============
+   Event handlers / wiring
+   ============ */
+
+getBtn.addEventListener("click", () => {
+  const ch = getRandomChallenge();
+  showChallengeText(ch);
+});
+
+// Queue link buttons
+p1QueueBtn.addEventListener("click", () => renderQueue("P1"));
+p2QueueBtn.addEventListener("click", () => renderQueue("P2"));
+
+/* initialize UI */
+updateTurnIndicator();
+updatePoints();
+queueDisplay.style.display = "none";
+queueDisplay.setAttribute("data-player","");
+
+</script>
+</body>
+</html>
